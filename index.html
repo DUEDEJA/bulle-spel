@@ -184,11 +184,40 @@
   .btn:hover { background: #FFD34E; transform: translateY(-2px); }
   .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--caramel); }
 
-  #highscore-display {
+  .hs-list {
     font-family: 'Nunito', sans-serif;
-    font-size: 1rem;
-    opacity: 0.7;
+    width: 100%;
+    max-width: 300px;
   }
+  .hs-list h3 {
+    font-family: 'Fredoka One', cursive;
+    color: var(--golden);
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+    opacity: 0.9;
+  }
+  .hs-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    border-radius: 12px;
+    margin-bottom: 6px;
+    background: rgba(255,255,255,0.07);
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .hs-row.gold   { background: rgba(245,200,66,0.18); }
+  .hs-row.silver { background: rgba(200,200,200,0.13); }
+  .hs-row.bronze { background: rgba(176,120,60,0.15); }
+  .hs-row.new-entry { animation: flash-new 0.6s ease 3; }
+  @keyframes flash-new {
+    0%,100% { background: rgba(59,196,122,0.1); }
+    50%      { background: rgba(59,196,122,0.4); }
+  }
+  .hs-medal { font-size: 1.4rem; }
+  .hs-score { margin-left: auto; color: var(--golden); font-family: 'Fredoka One', cursive; font-size: 1.2rem; }
+  .hs-empty { opacity: 0.4; font-style: italic; font-size: 0.9rem; }
 
   .big-bulle { font-size: 5rem; animation: float 3s ease-in-out infinite; }
   @keyframes float {
@@ -244,8 +273,11 @@
   <div class="big-bulle">🥐</div>
   <h1>Bulle Klick!</h1>
   <p>Klicka på bullarna för <strong>+2 poäng</strong>.<br>Undvik broccolin — den ger <strong>−5 poäng</strong>!<br>Missar du kostar det <strong>−1 poäng</strong>.<br>Du börjar med <strong>10 poäng</strong> och har 30 sekunder!</p>
+  <div class="hs-list">
+    <h3>🏆 Topp 3 – Globalt</h3>
+    <div id="hs-list-start"></div>
+  </div>
   <button class="btn" onclick="startGame()">Spela!</button>
-  <div id="highscore-display">Highscore: <span id="hs-start">0</span></div>
 </div>
 
 <!-- Game over -->
@@ -254,14 +286,28 @@
   <h1>Tid är ute!</h1>
   <div id="result-score">0p</div>
   <div id="new-highscore">🏆 Nytt highscore!</div>
+  <div id="name-wrap" style="display:none;flex-direction:column;align-items:center;gap:10px;width:100%;max-width:300px;">
+    <input id="player-name" type="text" maxlength="20" placeholder="Ditt namn..." style="
+      font-family:'Nunito',sans-serif;font-size:1.1rem;font-weight:700;
+      padding:10px 18px;border-radius:50px;border:3px solid var(--golden);
+      background:rgba(255,255,255,0.1);color:var(--cream);
+      width:100%;text-align:center;outline:none;
+    "/>
+    <button id="submit-score-btn" class="btn" style="margin-top:0;font-size:1.1rem;padding:10px 32px;">Spara poäng!</button>
+  </div>
+  <div class="hs-list">
+    <h3>🏆 Topp 3 – Globalt</h3>
+    <div id="hs-list-end"></div>
+  </div>
   <button class="btn" onclick="startGame()">Spela igen!</button>
-  <div id="highscore-display2">Highscore: <span id="hs-end">0</span></div>
 </div>
 
 <script>
+const SUPABASE_URL = 'https://zgchlrbochtphxaqtclj.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_7B6er92vK2YZ0zSg4DFMVw_6BMOdkhS';
+
 let score = 10;
 let timeLeft = 30;
-let highscore = 0;
 let gameRunning = false;
 let timerInterval = null;
 let bulleTimers = [];
@@ -271,9 +317,57 @@ const scoreEl = document.getElementById('score-val');
 const timerEl = document.getElementById('timer-val');
 const hsEl    = document.getElementById('hs-val');
 
-function updateHUD() {
+const medals = ['🥇','🥈','🥉'];
+const medalClass = ['gold','silver','bronze'];
+
+// Supabase helpers
+async function fetchTopScores() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/highscores?select=name,score&order=score.desc&limit=3`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch(e) { return []; }
+}
+
+async function submitScore(name, score) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/highscores`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ name, score })
+    });
+  } catch(e) {}
+}
+
+async function renderHSList(containerId, highlightName) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '<div class="hs-row"><span class="hs-empty">Laddar...</span></div>';
+  const list = await fetchTopScores();
+  if (list.length === 0) {
+    el.innerHTML = '<div class="hs-row"><span class="hs-empty">Inga poäng än – spela!</span></div>';
+    return;
+  }
+  el.innerHTML = list.map((row, i) => {
+    const isNew = highlightName && row.name === highlightName;
+    return `<div class="hs-row ${medalClass[i]}${isNew ? ' new-entry' : ''}">
+      <span class="hs-medal">${medals[i]}</span>
+      <span>${row.name}</span>
+      <span class="hs-score">${row.score}p</span>
+    </div>`;
+  }).join('');
+}
+
+async function updateHUD() {
   scoreEl.textContent = score;
-  hsEl.textContent    = highscore;
+  const top = await fetchTopScores();
+  hsEl.textContent = top[0]?.score ?? 0;
 }
 
 // Emoji bulle
@@ -307,7 +401,7 @@ function spawnBroccoli() {
     e.stopPropagation();
     if (!gameRunning) return;
     score = Math.max(0, score - 5);
-    updateHUD();
+    scoreEl.textContent = score;
     showPip(e.clientX, e.clientY, '−5');
     const sv = document.getElementById('score-val');
     sv.style.color = 'var(--red)';
@@ -349,7 +443,7 @@ function spawnBulle() {
     e.stopPropagation();
     if (!gameRunning) return;
     score += 2;
-    updateHUD();
+    scoreEl.textContent = score;
     showPip(e.clientX, e.clientY, '+2');
     removeBulle(el);
   });
@@ -389,7 +483,7 @@ arena.addEventListener('click', e => {
   if (!gameRunning) return;
   if (e.target.closest('.bulle')) return;
   score = Math.max(0, score - 1);
-  updateHUD();
+  scoreEl.textContent = score;
   showPip(e.clientX, e.clientY, '−1');
 });
 
@@ -425,25 +519,47 @@ function startGame() {
   bulleTimers.push(bt);
 }
 
-function endGame() {
+async function endGame() {
   gameRunning = false;
   clearInterval(timerInterval);
   bulleTimers.forEach(clearTimeout);
   bulleTimers = [];
   document.querySelectorAll('.bulle').forEach(b => b.remove());
 
-  const isNew = score > highscore;
-  if (isNew) highscore = score;
-
   document.getElementById('result-score').textContent = score + 'p';
-  document.getElementById('new-highscore').style.display = isNew ? 'block' : 'none';
-  document.getElementById('hs-end').textContent = highscore;
+  document.getElementById('new-highscore').style.display = 'none';
   document.getElementById('screen-end').style.display = 'flex';
-  updateHUD();
+
+  // Fråga efter namn och spara
+  const nameInput = document.getElementById('player-name');
+  const submitBtn = document.getElementById('submit-score-btn');
+  const nameWrap  = document.getElementById('name-wrap');
+
+  nameInput.value = '';
+  nameWrap.style.display = 'flex';
+  submitBtn.onclick = async () => {
+    const name = nameInput.value.trim() || 'Anonym';
+    nameWrap.style.display = 'none';
+    submitBtn.disabled = true;
+
+    // Kolla om nytt toppscore
+    const before = await fetchTopScores();
+    const wasTop = before[0]?.score ?? 0;
+
+    await submitScore(name, score);
+
+    if (score > wasTop) {
+      document.getElementById('new-highscore').style.display = 'block';
+    }
+    await renderHSList('hs-list-end', name);
+    await updateHUD();
+  };
+
+  await renderHSList('hs-list-end');
 }
 
-// Init highscore-display
-document.getElementById('hs-start').textContent = highscore;
+// Init
+renderHSList('hs-list-start');
 updateHUD();
 </script>
 </body>
