@@ -243,7 +243,7 @@
 <div id="screen-start">
   <div class="big-bulle">🥐</div>
   <h1>Bulle Klick!</h1>
-  <p>Klicka på bullarna för <strong>+2 poäng</strong>.<br>Missar du kostar det <strong>−1 poäng</strong>.<br>Du börjar med <strong>10 poäng</strong> och har 30 sekunder!</p>
+  <p>Klicka på bullarna för <strong>+2 poäng</strong>.<br>Undvik broccolin — den ger <strong>−5 poäng</strong>!<br>Missar du kostar det <strong>−1 poäng</strong>.<br>Du börjar med <strong>10 poäng</strong> och har 30 sekunder!</p>
   <button class="btn" onclick="startGame()">Spela!</button>
   <div id="highscore-display">Highscore: <span id="hs-start">0</span></div>
 </div>
@@ -276,50 +276,70 @@ function updateHUD() {
   hsEl.textContent    = highscore;
 }
 
-// SVG bulle
+// Emoji bulle
+const bulleEmojis = ['🍞', '🥖', '🥐', '🧁', '🍩'];
 function bulleSVG(size) {
-  const colors = [
-    { top: '#C8813A', bottom: '#8B4E1A', seed: '#FFF8EE' },
-    { top: '#D4A057', bottom: '#9C6022', seed: '#3D1A00' },
-    { top: '#B87333', bottom: '#7A3E10', seed: '#FFD700' },
-  ];
-  const c = colors[Math.floor(Math.random()*colors.length)];
-  return `<svg width="${size}" height="${size*0.7}" viewBox="0 0 100 70" class="bulle-svg" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <radialGradient id="bg${Date.now()}" cx="40%" cy="35%" r="60%">
-        <stop offset="0%" stop-color="${c.top}"/>
-        <stop offset="100%" stop-color="${c.bottom}"/>
-      </radialGradient>
-    </defs>
-    <!-- Bottom bun -->
-    <ellipse cx="50" cy="60" rx="44" ry="12" fill="${c.bottom}" opacity="0.6"/>
-    <!-- Top bun -->
-    <ellipse cx="50" cy="35" rx="44" ry="32" fill="url(#bg${Date.now()})"/>
-    <!-- Gloss -->
-    <ellipse cx="38" cy="25" rx="14" ry="7" fill="white" opacity="0.15"/>
-    <!-- Frön -->
-    <ellipse cx="38" cy="28" rx="3" ry="5" fill="${c.seed}" opacity="0.8" transform="rotate(-20 38 28)"/>
-    <ellipse cx="52" cy="24" rx="3" ry="5" fill="${c.seed}" opacity="0.8" transform="rotate(10 52 24)"/>
-    <ellipse cx="64" cy="30" rx="3" ry="5" fill="${c.seed}" opacity="0.8" transform="rotate(25 64 30)"/>
-  </svg>`;
+  const emoji = bulleEmojis[Math.floor(Math.random() * bulleEmojis.length)];
+  return `<span style="font-size:${size}px;line-height:1;display:block;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));user-select:none;">${emoji}</span>`;
+}
+
+// Emoji broccoli
+function broccoliSVG(size) {
+  return `<span style="font-size:${size}px;line-height:1;display:block;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));user-select:none;">🥦</span>`;
+}
+
+function spawnBroccoli() {
+  if (!gameRunning) return;
+  const size = 45 + Math.random() * 30;
+  const el = document.createElement('div');
+  el.className = 'bulle broccoli';
+
+  const margin = 80;
+  const maxX = window.innerWidth  - size*1.3 - margin;
+  const maxY = window.innerHeight - size*1.3 - margin;
+  el.style.left = (margin/2 + Math.random() * maxX) + 'px';
+  el.style.top  = (margin/2 + Math.random() * maxY) + 'px';
+  el.innerHTML = broccoliSVG(size);
+
+  const lifespan = Math.max(1200, 2600 - (30 - timeLeft) * 30);
+
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!gameRunning) return;
+    score = Math.max(0, score - 5);
+    updateHUD();
+    showPip(e.clientX, e.clientY, '−5');
+    const sv = document.getElementById('score-val');
+    sv.style.color = 'var(--red)';
+    setTimeout(() => sv.style.color = '', 500);
+    removeBulle(el);
+  });
+
+  arena.appendChild(el);
+
+  const t = setTimeout(() => { if (el.parentNode) removeBulle(el); }, lifespan);
+  bulleTimers.push(t);
+
+  // Nästa broccoli om ca 5–9 sek
+  const bt = setTimeout(spawnBroccoli, 5000 + Math.random() * 4000);
+  bulleTimers.push(bt);
 }
 
 function spawnBulle() {
   if (!gameRunning) return;
 
-  const size = 60 + Math.random() * 60; // 60–120px
+  const size = 50 + Math.random() * 40; // storlek i px för emoji-font
   const el = document.createElement('div');
   el.className = 'bulle';
 
   const margin = 80;
-  const maxX = window.innerWidth  - size   - margin;
-  const maxY = window.innerHeight - size*0.7 - margin;
+  const maxX = window.innerWidth  - size*1.3 - margin;
+  const maxY = window.innerHeight - size*1.3 - margin;
   const x = margin/2 + Math.random() * maxX;
   const y = margin/2 + Math.random() * maxY;
 
   el.style.left = x + 'px';
   el.style.top  = y + 'px';
-  el.style.width = size + 'px';
   el.innerHTML = bulleSVG(size);
 
   // Hur länge bullen stannar (kortare = svårare när tid minskar)
@@ -399,8 +419,10 @@ function startGame() {
     if (timeLeft <= 0) endGame();
   }, 1000);
 
-  // Spawnа bullar
+  // Spawna bullar och broccoli
   spawnBulle();
+  const bt = setTimeout(spawnBroccoli, 3000 + Math.random() * 3000);
+  bulleTimers.push(bt);
 }
 
 function endGame() {
