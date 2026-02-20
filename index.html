@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulle Klick!</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FFF8EE;
+    --caramel: #C8813A;
+    --dark-brown: #3D1A00;
+    --golden: #F5C842;
+    --red: #E8445A;
+    --green: #3BC47A;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--cream);
+    font-family: 'Nunito', sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* Bakgrundsrullande dekor */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 20%, #FDEFD0 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, #FFE4B5 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #game-wrap {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+  }
+
+  /* HUD */
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 28px;
+    background: var(--dark-brown);
+    color: var(--cream);
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.3rem;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(61,26,0,0.3);
+  }
+
+  .hud-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .hud-label {
+    font-size: 0.75rem;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 700;
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+    line-height: 1;
+  }
+
+  .hud-val {
+    font-size: 1.6rem;
+    line-height: 1;
+    color: var(--golden);
+  }
+
+  #timer-val {
+    color: var(--golden);
+    transition: color 0.3s;
+  }
+  #timer-val.danger { color: var(--red); animation: pulse 0.5s infinite alternate; }
+
+  @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.15); } }
+
+  /* Poängpip-animation */
+  .pip {
+    position: fixed;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.4rem;
+    pointer-events: none;
+    z-index: 200;
+    animation: pip-up 0.8s ease-out forwards;
+  }
+  .pip.plus { color: var(--green); }
+  .pip.minus { color: var(--red); }
+
+  @keyframes pip-up {
+    0%   { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-70px) scale(1.4); }
+  }
+
+  /* Bulle */
+  .bulle {
+    position: absolute;
+    cursor: pointer;
+    transform-origin: center;
+    animation: bulle-in 0.25s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    z-index: 10;
+  }
+
+  @keyframes bulle-in {
+    from { transform: scale(0) rotate(-20deg); opacity: 0; }
+    to   { transform: scale(1) rotate(0deg);  opacity: 1; }
+  }
+
+  .bulle:hover { transform: scale(1.12); }
+
+  .bulle-svg { filter: drop-shadow(0 4px 8px rgba(61,26,0,0.3)); }
+
+  /* Explode-animation */
+  .bulle.explode {
+    animation: bulle-explode 0.3s ease-out forwards;
+  }
+
+  @keyframes bulle-explode {
+    0%   { transform: scale(1); opacity: 1; }
+    50%  { transform: scale(1.4); opacity: 0.8; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+
+  /* Startskärm */
+  #screen-start, #screen-end {
+    position: fixed;
+    inset: 0;
+    background: rgba(61,26,0,0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+    gap: 20px;
+    color: var(--cream);
+    font-family: 'Fredoka One', cursive;
+    text-align: center;
+    padding: 20px;
+  }
+
+  #screen-start h1, #screen-end h1 {
+    font-size: clamp(2.5rem, 8vw, 5rem);
+    color: var(--golden);
+    text-shadow: 0 4px 0 var(--caramel);
+    line-height: 1;
+  }
+
+  #screen-start p, #screen-end p {
+    font-family: 'Nunito', sans-serif;
+    font-size: 1.1rem;
+    max-width: 400px;
+    opacity: 0.85;
+    line-height: 1.6;
+  }
+
+  .btn {
+    background: var(--golden);
+    color: var(--dark-brown);
+    border: none;
+    font-family: 'Fredoka One', cursive;
+    font-size: 1.5rem;
+    padding: 14px 48px;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: transform 0.15s, background 0.15s;
+    box-shadow: 0 6px 0 var(--caramel);
+    margin-top: 8px;
+  }
+  .btn:hover { background: #FFD34E; transform: translateY(-2px); }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--caramel); }
+
+  #highscore-display {
+    font-family: 'Nunito', sans-serif;
+    font-size: 1rem;
+    opacity: 0.7;
+  }
+
+  .big-bulle { font-size: 5rem; animation: float 3s ease-in-out infinite; }
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-16px); }
+  }
+
+  #result-score {
+    font-size: clamp(3rem, 10vw, 6rem);
+    color: var(--golden);
+    text-shadow: 0 4px 0 var(--caramel);
+  }
+
+  #new-highscore {
+    display: none;
+    font-size: 1.3rem;
+    color: var(--green);
+    animation: wiggle 0.5s infinite alternate;
+  }
+  @keyframes wiggle {
+    from { transform: rotate(-3deg); }
+    to   { transform: rotate(3deg); }
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="hud-item">
+    <div>
+      <span class="hud-label">Poäng</span>
+      <span class="hud-val" id="score-val">10</span>
+    </div>
+  </div>
+  <div class="hud-item">
+    <div style="text-align:center">
+      <span class="hud-label">Tid kvar</span>
+      <span class="hud-val" id="timer-val">30</span>
+    </div>
+  </div>
+  <div class="hud-item">
+    <div style="text-align:right">
+      <span class="hud-label">Highscore</span>
+      <span class="hud-val" id="hs-val">0</span>
+    </div>
+  </div>
+</div>
+
+<div id="game-wrap" id="arena"></div>
+
+<!-- Start -->
+<div id="screen-start">
+  <div class="big-bulle">🥐</div>
+  <h1>Bulle Klick!</h1>
+  <p>Klicka på bullarna för <strong>+2 poäng</strong>.<br>Missar du kostar det <strong>−1 poäng</strong>.<br>Du börjar med <strong>10 poäng</strong> och har 30 sekunder!</p>
+  <button class="btn" onclick="startGame()">Spela!</button>
+  <div id="highscore-display">Highscore: <span id="hs-start">0</span></div>
+</div>
+
+<!-- Game over -->
+<div id="screen-end" style="display:none">
+  <div class="big-bulle">🥐</div>
+  <h1>Tid är ute!</h1>
+  <div id="result-score">0p</div>
+  <div id="new-highscore">🏆 Nytt highscore!</div>
+  <button class="btn" onclick="startGame()">Spela igen!</button>
+  <div id="highscore-display2">Highscore: <span id="hs-end">0</span></div>
+</div>
+
+<script>
+let score = 10;
+let timeLeft = 30;
+let highscore = 0;
+let gameRunning = false;
+let timerInterval = null;
+let bulleTimers = [];
+
+const arena = document.getElementById('game-wrap');
+const scoreEl = document.getElementById('score-val');
+const timerEl = document.getElementById('timer-val');
+const hsEl    = document.getElementById('hs-val');
+
+function updateHUD() {
+  scoreEl.textContent = score;
+  hsEl.textContent    = highscore;
+}
+
+// SVG bulle
+function bulleSVG(size) {
+  const colors = [
+    { top: '#C8813A', bottom: '#8B4E1A', seed: '#FFF8EE' },
+    { top: '#D4A057', bottom: '#9C6022', seed: '#3D1A00' },
+    { top: '#B87333', bottom: '#7A3E10', seed: '#FFD700' },
+  ];
+  const c = colors[Math.floor(Math.random()*colors.length)];
+  return `<svg width="${size}" height="${size*0.7}" viewBox="0 0 100 70" class="bulle-svg" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="bg${Date.now()}" cx="40%" cy="35%" r="60%">
+        <stop offset="0%" stop-color="${c.top}"/>
+        <stop offset="100%" stop-color="${c.bottom}"/>
+      </radialGradient>
+    </defs>
+    <!-- Bottom bun -->
+    <ellipse cx="50" cy="60" rx="44" ry="12" fill="${c.bottom}" opacity="0.6"/>
+    <!-- Top bun -->
+    <ellipse cx="50" cy="35" rx="44" ry="32" fill="url(#bg${Date.now()})"/>
+    <!-- Gloss -->
+    <ellipse cx="38" cy="25" rx="14" ry="7" fill="white" opacity="0.15"/>
+    <!-- Frön -->
+    <ellipse cx="38" cy="28" rx="3" ry="5" fill="${c.seed}" opacity="0.8" transform="rotate(-20 38 28)"/>
+    <ellipse cx="52" cy="24" rx="3" ry="5" fill="${c.seed}" opacity="0.8" transform="rotate(10 52 24)"/>
+    <ellipse cx="64" cy="30" rx="3" ry="5" fill="${c.seed}" opacity="0.8" transform="rotate(25 64 30)"/>
+  </svg>`;
+}
+
+function spawnBulle() {
+  if (!gameRunning) return;
+
+  const size = 60 + Math.random() * 60; // 60–120px
+  const el = document.createElement('div');
+  el.className = 'bulle';
+
+  const margin = 80;
+  const maxX = window.innerWidth  - size   - margin;
+  const maxY = window.innerHeight - size*0.7 - margin;
+  const x = margin/2 + Math.random() * maxX;
+  const y = margin/2 + Math.random() * maxY;
+
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+  el.style.width = size + 'px';
+  el.innerHTML = bulleSVG(size);
+
+  // Hur länge bullen stannar (kortare = svårare när tid minskar)
+  const lifespan = Math.max(1000, 2200 - (30 - timeLeft) * 30);
+
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!gameRunning) return;
+    score += 2;
+    updateHUD();
+    showPip(e.clientX, e.clientY, '+2');
+    removeBulle(el);
+  });
+
+  arena.appendChild(el);
+
+  // Auto-remove efter lifespan
+  const t = setTimeout(() => {
+    if (el.parentNode) removeBulle(el, false);
+  }, lifespan);
+  bulleTimers.push(t);
+
+  // Nästa bulle
+  const spawnDelay = Math.max(400, 1200 - (30 - timeLeft) * 20);
+  const st = setTimeout(spawnBulle, spawnDelay);
+  bulleTimers.push(st);
+}
+
+function removeBulle(el, clicked = true) {
+  if (!el.parentNode) return;
+  el.classList.add('explode');
+  setTimeout(() => el.remove(), 300);
+}
+
+function showPip(x, y, text) {
+  const pip = document.createElement('div');
+  pip.className = 'pip ' + (text.startsWith('+') ? 'plus' : 'minus');
+  pip.textContent = text;
+  pip.style.left = (x - 20) + 'px';
+  pip.style.top  = (y - 20) + 'px';
+  document.body.appendChild(pip);
+  setTimeout(() => pip.remove(), 800);
+}
+
+// Klick på bakgrunden = miss
+arena.addEventListener('click', e => {
+  if (!gameRunning) return;
+  if (e.target.closest('.bulle')) return;
+  score = Math.max(0, score - 1);
+  updateHUD();
+  showPip(e.clientX, e.clientY, '−1');
+});
+
+function startGame() {
+  // Rensa gamla
+  document.querySelectorAll('.bulle').forEach(b => b.remove());
+  bulleTimers.forEach(clearTimeout);
+  bulleTimers = [];
+  clearInterval(timerInterval);
+
+  score    = 10;
+  timeLeft = 30;
+  gameRunning = true;
+
+  timerEl.classList.remove('danger');
+  updateHUD();
+  timerEl.textContent = timeLeft;
+
+  document.getElementById('screen-start').style.display = 'none';
+  document.getElementById('screen-end').style.display   = 'none';
+
+  // Timer
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    timerEl.textContent = timeLeft;
+    if (timeLeft <= 10) timerEl.classList.add('danger');
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+
+  // Spawnа bullar
+  spawnBulle();
+}
+
+function endGame() {
+  gameRunning = false;
+  clearInterval(timerInterval);
+  bulleTimers.forEach(clearTimeout);
+  bulleTimers = [];
+  document.querySelectorAll('.bulle').forEach(b => b.remove());
+
+  const isNew = score > highscore;
+  if (isNew) highscore = score;
+
+  document.getElementById('result-score').textContent = score + 'p';
+  document.getElementById('new-highscore').style.display = isNew ? 'block' : 'none';
+  document.getElementById('hs-end').textContent = highscore;
+  document.getElementById('screen-end').style.display = 'flex';
+  updateHUD();
+}
+
+// Init highscore-display
+document.getElementById('hs-start').textContent = highscore;
+updateHUD();
+</script>
+</body>
+</html>
